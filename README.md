@@ -1,16 +1,17 @@
 # AudioMicSync
 
-Android app that records audio from a USB microphone and automatically transfers takes to a PC — triggered over Wi-Fi via [Rokoko Studio](https://www.rokoko.com/) or any UDP-capable software.
+Android app that records audio from a USB microphone and automatically transfers takes to a PC — triggered over Wi-Fi by **[rokoko-audio-sync](https://github.com/KriaaCompany/rokoko-audio-sync)**, Kriaa's companion PC tool that bridges Rokoko Studio with this app.
 
 Built for motion-capture workflows where the Android device acts as a body-worn audio recorder that stays in sync with the capture session.
 
 ## How it works
 
-1. The app runs a background service that listens for UDP packets on a configurable port (default **9877**)
-2. On `record_start`, it begins capturing audio from the selected microphone
-3. On `record_stop`, it encodes the PCM buffer to WAV and uploads it to your PC via HTTP (default port **9878**)
+1. **[rokoko-audio-sync](https://github.com/KriaaCompany/rokoko-audio-sync)** runs on your PC and monitors Rokoko Studio for take events
+2. It sends UDP packets to this app on the Android device (default port **9877**)
+3. On `record_start`, the app begins capturing audio from the selected microphone
+4. On `record_stop`, it encodes the PCM buffer to WAV and uploads it back to the PC via HTTP (default port **9878**)
 
-UDP packet format:
+UDP packet format sent by rokoko-audio-sync:
 ```json
 { "cmd": "record_start", "take": "TAKE_001" }
 { "cmd": "record_stop" }
@@ -42,27 +43,10 @@ UDP packet format:
 4. Select your USB microphone from the dropdown (tap **Refresh** after plugging it in)
 5. Your phone's IP is shown on the main screen — point your trigger software there
 
-## PC receiver
+## PC tool
 
-Any HTTP server that accepts `multipart/form-data` POST requests at `/upload` will work.
-A minimal Python receiver:
-
-```python
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import cgi, os
-
-class Handler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        form = cgi.FieldStorage(fp=self.rfile, headers=self.headers,
-                                environ={'REQUEST_METHOD': 'POST'})
-        f = form['file']
-        with open(f.filename, 'wb') as out:
-            out.write(f.file.read())
-        self.send_response(200)
-        self.end_headers()
-
-HTTPServer(('0.0.0.0', 9878), Handler).serve_forever()
-```
+The companion PC app **[rokoko-audio-sync](https://github.com/KriaaCompany/rokoko-audio-sync)** handles both sides:
+sending UDP triggers to this app and receiving the uploaded WAV files. See that repo for setup instructions.
 
 ## Building
 
