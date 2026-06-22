@@ -1,4 +1,7 @@
-package com.example.audiomicsync
+// Copyright (c) 2026 Kriaa
+// SPDX-License-Identifier: MIT
+
+package `in`.kriaa.audiomicsync
 
 import java.io.File
 import java.io.FileOutputStream

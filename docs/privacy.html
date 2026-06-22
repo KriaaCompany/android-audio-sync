@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — AudioMicSync</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f9f9f9;
+      color: #1a1a1a;
+      line-height: 1.7;
+    }
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 40px 24px 32px;
+    }
+    header a { color: #aab4c8; font-size: 0.875rem; text-decoration: none; display: block; margin-bottom: 12px; }
+    header a:hover { color: #fff; }
+    header h1 { font-size: 1.7rem; font-weight: 700; }
+    header p  { margin-top: 6px; font-size: 0.875rem; color: #aab4c8; }
+    main {
+      max-width: 720px;
+      margin: 48px auto;
+      padding: 0 24px 80px;
+    }
+    h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin: 36px 0 10px;
+      color: #1a1a2e;
+    }
+    p, li { font-size: 0.95rem; color: #333; margin-bottom: 10px; }
+    ul { padding-left: 20px; margin-bottom: 10px; }
+    li { margin-bottom: 6px; }
+    footer {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #888;
+      padding: 24px;
+      border-top: 1px solid #e5e5e5;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <a href="index.html">← AudioMicSync</a>
+  <h1>Privacy Policy</h1>
+  <p>Effective date: June 22, 2026</p>
+</header>
+
+<main>
+  <p>
+    AudioMicSync ("the App") is developed and maintained by Kriaa. This Privacy Policy explains how
+    the App handles information when you use it.
+  </p>
+
+  <h2>1. No Data Collection</h2>
+  <p>
+    AudioMicSync does not collect, transmit, or share any personal data with Kriaa or any third party.
+    The App does not include analytics, advertising SDKs, crash reporting services, or any other
+    network calls outside of the local network transfer described below.
+  </p>
+
+  <h2>2. Audio Recording</h2>
+  <p>
+    The App records audio from the device's microphone (including connected USB microphones) when
+    triggered by a UDP command from software running on your local network. Recorded audio is stored
+    as a WAV file in the App's private storage directory on the device.
+  </p>
+  <p>
+    Audio data is transferred only to the IP address and port that <strong>you</strong> configure in
+    the App's settings. This is typically a receiver application running on a PC on the same local
+    network. No audio data is ever sent to Kriaa or any external server.
+  </p>
+
+  <h2>3. Network Access</h2>
+  <p>
+    The App uses your device's Wi-Fi or Ethernet connection solely to:
+  </p>
+  <ul>
+    <li>Listen for UDP trigger commands on a port you configure (default: 9877)</li>
+    <li>Upload recorded WAV files to the PC IP address you configure (default port: 9878)</li>
+  </ul>
+  <p>
+    All network communication happens on your local network between your Android device and a PC you
+    control. No data leaves your local network.
+  </p>
+
+  <h2>4. Permissions Used</h2>
+  <ul>
+    <li><strong>RECORD_AUDIO</strong> — required to capture audio from the microphone.</li>
+    <li><strong>INTERNET</strong> — required to transfer recorded files to your PC over the local network.</li>
+    <li><strong>FOREGROUND_SERVICE / FOREGROUND_SERVICE_MICROPHONE</strong> — required to keep the recorder running reliably in the background.</li>
+    <li><strong>POST_NOTIFICATIONS</strong> — used to show a persistent status notification while the service is active.</li>
+    <li><strong>WAKE_LOCK</strong> — prevents the device from sleeping while listening for triggers.</li>
+    <li><strong>ACCESS_NETWORK_STATE / ACCESS_WIFI_STATE</strong> — used to display your device's local IP address in the UI.</li>
+  </ul>
+
+  <h2>5. Local Storage</h2>
+  <p>
+    Recorded WAV files are saved to the App's external files directory
+    (<code>Android/data/in.kriaa.audiomicsync/files/takes/</code>). These files remain on your
+    device until you delete them. The App does not back up these files to any cloud service.
+  </p>
+
+  <h2>6. Children's Privacy</h2>
+  <p>
+    AudioMicSync is not directed at children under 13 and does not knowingly collect any information
+    from children.
+  </p>
+
+  <h2>7. Changes to This Policy</h2>
+  <p>
+    If this Privacy Policy changes, the updated version will be posted at this URL with a revised
+    effective date.
+  </p>
+
+  <h2>8. Contact</h2>
+  <p>
+    Questions about this Privacy Policy can be directed to:
+    <a href="mailto:krishna@kriaa.in">krishna@kriaa.in</a>
+  </p>
+</main>
+
+<footer>
+  &copy; 2026 Kriaa. Released under the MIT License.
+</footer>
+
+</body>
+</html>

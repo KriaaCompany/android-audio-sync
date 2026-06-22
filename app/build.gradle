@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.audiomicsync'
+    namespace 'in.kriaa.audiomicsync'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.audiomicsync"
+        applicationId "in.kriaa.audiomicsync"
         minSdk 26
         targetSdk 34
         versionCode 1
