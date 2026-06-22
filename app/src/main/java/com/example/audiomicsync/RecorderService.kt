@@ -459,13 +459,16 @@ class RecorderService : Service() {
             } else {
                 try {
                     Log.d(TAG, "Starting upload: ${wavFile.name} → http://$pcIp:$uploadPort/upload")
-                    val ok = FileUploader.upload(wavFile, pcIp, uploadPort) { pct ->
+                    val result = FileUploader.uploadWithResult(wavFile, pcIp, uploadPort) { pct ->
                         Log.v(TAG, "Upload progress: $pct%")
                         listener?.onTransferProgress(pct)
                     }
-                    Log.d(TAG, "Upload result: $ok")
-                    if (ok) log("Upload OK: ${wavFile.name}")
-                    else    log("Upload failed (server error) — file kept locally")
+                    Log.d(TAG, "Upload result: $result")
+                    if (result.success) {
+                        log("Upload OK: ${wavFile.name}")
+                    } else {
+                        log("Upload failed: ${result.errorMessage ?: "server error"} — file kept locally")
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Upload exception", e)
                     log("Upload error: ${e.message} — file kept locally")

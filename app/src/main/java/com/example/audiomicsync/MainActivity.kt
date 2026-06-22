@@ -1,6 +1,8 @@
 package com.example.audiomicsync
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -22,6 +24,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -49,6 +52,8 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
     private lateinit var spinnerSampleRate: Spinner
     private lateinit var tvLastFile: TextView
     private lateinit var tvTransferStatus: TextView
+    private lateinit var btnCopyLog: Button
+    private lateinit var btnClearLog: Button
     private lateinit var tvLog: TextView
 
     private var orderedDevices: List<AudioDeviceInfo?> = emptyList()
@@ -89,6 +94,8 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         spinnerSampleRate = findViewById(R.id.spinner_sample_rate)
         tvLastFile       = findViewById(R.id.tv_last_file)
         tvTransferStatus = findViewById(R.id.tv_transfer_status)
+        btnCopyLog       = findViewById(R.id.btn_copy_log)
+        btnClearLog      = findViewById(R.id.btn_clear_log)
         tvLog            = findViewById(R.id.tv_log)
 
         refreshPhoneIp()
@@ -96,6 +103,8 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         refreshMics()
         btnRefreshPhoneIp.setOnClickListener { refreshPhoneIp() }
         btnRefreshMics.setOnClickListener { refreshMics() }
+        btnCopyLog.setOnClickListener { copyLog() }
+        btnClearLog.setOnClickListener { clearLog() }
         updatePcIpDisplay()
 
         findViewById<Button>(R.id.btn_test_start).setOnClickListener {
@@ -370,6 +379,23 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         synchronized(svc.eventLog) {
             tvLog.text = svc.eventLog.joinToString("\n").ifEmpty { "—" }
         }
+    }
+
+    private fun copyLog() {
+        val text = tvLog.text.toString().takeIf { it != "—" }.orEmpty()
+        getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("AudioMicSync log", text))
+        Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun clearLog() {
+        service?.let { svc ->
+            synchronized(svc.eventLog) {
+                svc.eventLog.clear()
+            }
+        }
+        tvLog.text = "—"
+        Toast.makeText(this, "Log cleared", Toast.LENGTH_SHORT).show()
     }
 
     private fun updatePcIpDisplay() {
