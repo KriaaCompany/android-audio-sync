@@ -6,6 +6,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
@@ -25,6 +27,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.net.NetworkInterface
+import java.util.Locale
 
 class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
 
@@ -40,6 +43,7 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
     private lateinit var tvUdpStatus: TextView
     private lateinit var tvPhoneIp: TextView
     private lateinit var tvPcIp: TextView
+    private lateinit var btnRefreshPhoneIp: Button
     private lateinit var spinnerMic: Spinner
     private lateinit var btnRefreshMics: Button
     private lateinit var spinnerSampleRate: Spinner
@@ -79,6 +83,7 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         tvUdpStatus      = findViewById(R.id.tv_udp_status)
         tvPhoneIp        = findViewById(R.id.tv_phone_ip)
         tvPcIp           = findViewById(R.id.tv_pc_ip)
+        btnRefreshPhoneIp = findViewById(R.id.btn_refresh_phone_ip)
         spinnerMic       = findViewById(R.id.spinner_mic)
         btnRefreshMics   = findViewById(R.id.btn_refresh_mics)
         spinnerSampleRate = findViewById(R.id.spinner_sample_rate)
@@ -86,9 +91,10 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         tvTransferStatus = findViewById(R.id.tv_transfer_status)
         tvLog            = findViewById(R.id.tv_log)
 
-        tvPhoneIp.text = getLocalIp()
+        refreshPhoneIp()
         setupSampleRateSpinner()
         refreshMics()
+        btnRefreshPhoneIp.setOnClickListener { refreshPhoneIp() }
         btnRefreshMics.setOnClickListener { refreshMics() }
         updatePcIpDisplay()
 
@@ -256,16 +262,25 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         val savedId = prefs().getInt(RecorderService.PREF_MIC_DEVICE_ID, -1)
-        val idx = if (savedId == -1) 0
-                  else orderedDevices.indexOfFirst { it?.id == savedId }.coerceAtLeast(0)
+        val savedKey = prefs().getString(RecorderService.PREF_MIC_DEVICE_KEY, "") ?: ""
+        val hasSavedMic = savedId != -1 || savedKey.isNotBlank()
+        val idIdx = if (savedId == -1) -1 else orderedDevices.indexOfFirst { it?.id == savedId }
+        val keyIdx = if (savedKey.isBlank()) -1 else orderedDevices.indexOfFirst { micDeviceKey(it) == savedKey }
+        val idx = when {
+            idIdx >= 0 -> idIdx
+            keyIdx >= 0 -> keyIdx
+            else -> 0
+        }
         spinnerMic.setSelection(idx)
+        if (!hasSavedMic || idIdx >= 0 || keyIdx >= 0) persistSelectedMic(idx)
         Log.d(TAG, "Mic spinner: ${labels.size} entries, selected idx=$idx")
 
         spinnerMic.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>, v: android.view.View?, pos: Int, id: Long) {
-                val deviceId = orderedDevices[pos]?.id ?: -1
+                val device = orderedDevices[pos]
+                val deviceId = device?.id ?: -1
                 Log.d(TAG, "Mic selected: pos=$pos deviceId=$deviceId")
-                prefs().edit().putInt(RecorderService.PREF_MIC_DEVICE_ID, deviceId).apply()
+                persistSelectedMic(pos)
             }
             override fun onNothingSelected(p: AdapterView<*>) {}
         }
@@ -289,6 +304,19 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         return "$type: ${d.productName ?: "Device ${d.id}"}"
     }
 
+    private fun persistSelectedMic(pos: Int) {
+        val device = orderedDevices.getOrNull(pos)
+        prefs().edit()
+            .putInt(RecorderService.PREF_MIC_DEVICE_ID, device?.id ?: -1)
+            .putString(RecorderService.PREF_MIC_DEVICE_KEY, micDeviceKey(device))
+            .apply()
+    }
+
+    private fun micDeviceKey(d: AudioDeviceInfo?): String {
+        if (d == null) return "builtin"
+        return "${d.type}:${d.productName?.toString().orEmpty()}"
+    }
+
     private fun showSettingsDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_settings, null)
         val etPcIp       = view.findViewById<EditText>(R.id.et_pc_ip)
@@ -310,12 +338,14 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
                 val oldUdp     = p.getInt(RecorderService.PREF_UDP_PORT, RecorderService.DEFAULT_UDP_PORT)
 
                 Log.d(TAG, "Settings saved: pcIp=$pcIp uploadPort=$uploadPort udpPort=$udpPort")
-                p.edit()
+                val saved = p.edit()
                     .putString(RecorderService.PREF_PC_IP, pcIp)
                     .putInt(RecorderService.PREF_UPLOAD_PORT, uploadPort)
                     .putInt(RecorderService.PREF_UDP_PORT, udpPort)
-                    .apply()
+                    .commit()
 
+                Log.d(TAG, "Settings commit result: $saved")
+                refreshPhoneIp()
                 updatePcIpDisplay()
                 tvUdpStatus.text = "listening on :$udpPort"
                 if (udpPort != oldUdp) service?.restartUdpListener()
@@ -331,6 +361,8 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         svc.lastFile.takeIf { it.isNotEmpty() }?.let { tvLastFile.text = it }
         val udpPort = prefs().getInt(RecorderService.PREF_UDP_PORT, RecorderService.DEFAULT_UDP_PORT)
         tvUdpStatus.text = "listening on :$udpPort"
+        refreshPhoneIp()
+        updatePcIpDisplay()
     }
 
     private fun refreshLog() {
@@ -347,21 +379,70 @@ class MainActivity : AppCompatActivity(), RecorderService.StatusListener {
         tvPcIp.text = if (ip.isBlank()) "not configured" else "$ip:$port"
     }
 
+    private fun refreshPhoneIp() {
+        tvPhoneIp.text = getLocalIp()
+    }
+
     private fun getLocalIp(): String {
         return try {
-            val ip = NetworkInterface.getNetworkInterfaces()
+            val activeIp = getActiveNetworkIp()
+            if (activeIp != null) {
+                Log.d(TAG, "Active network IP: $activeIp")
+                return activeIp
+            }
+
+            val interfaces = NetworkInterface.getNetworkInterfaces()
                 .asSequence()
                 .filter { !it.isLoopback && it.isUp }
-                .flatMap { it.inetAddresses.asSequence() }
+                .toList()
+            val preferred = interfaces
+                .filter { isPreferredNetworkInterface(it.name) }
+                .flatMap { it.inetAddresses.asSequence().toList() }
                 .filterIsInstance<java.net.Inet4Address>()
-                .firstOrNull()
-                ?.hostAddress ?: "Unknown"
+                .firstOrNull { !it.isLoopbackAddress && it.isSiteLocalAddress }
+            val fallback = interfaces
+                .flatMap { it.inetAddresses.asSequence().toList() }
+                .filterIsInstance<java.net.Inet4Address>()
+                .firstOrNull { !it.isLoopbackAddress && it.isSiteLocalAddress }
+            val ip = preferred?.hostAddress ?: fallback?.hostAddress ?: "Unknown"
             Log.d(TAG, "Local IP: $ip")
             ip
         } catch (e: Exception) {
             Log.e(TAG, "getLocalIp failed", e)
             "Unknown"
         }
+    }
+
+    private fun getActiveNetworkIp(): String? {
+        val cm = getSystemService(ConnectivityManager::class.java)
+        val preferredNetworks = cm.allNetworks.filter { network ->
+            val caps = cm.getNetworkCapabilities(network)
+            caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
+                caps?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true
+        }
+        val activeNetwork = cm.activeNetwork
+        val networks = if (activeNetwork != null) {
+            preferredNetworks + listOf(activeNetwork)
+        } else {
+            preferredNetworks
+        }
+
+        return networks.asSequence()
+            .distinct()
+            .mapNotNull { cm.getLinkProperties(it) }
+            .flatMap { it.linkAddresses.asSequence() }
+            .map { it.address }
+            .filterIsInstance<java.net.Inet4Address>()
+            .firstOrNull { !it.isLoopbackAddress && it.isSiteLocalAddress }
+            ?.hostAddress
+    }
+
+    private fun isPreferredNetworkInterface(name: String): Boolean {
+        val n = name.lowercase(Locale.US)
+        return n.startsWith("wlan") ||
+            n.startsWith("eth") ||
+            n.startsWith("ap") ||
+            n.startsWith("p2p")
     }
 
     private fun prefs() = getSharedPreferences(RecorderService.PREFS_NAME, MODE_PRIVATE)

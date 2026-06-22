@@ -79,6 +79,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
+                android:gravity="center_vertical"
                 android:layout_marginBottom="4dp">
 
                 <TextView
@@ -90,11 +91,22 @@
 
                 <TextView
                     android:id="@+id/tv_phone_ip"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:text="—"
                     android:textSize="13sp"
                     android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/btn_refresh_phone_ip"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:text="↺"
+                    android:textSize="16sp"
+                    android:padding="0dp"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_marginStart="4dp" />
             </LinearLayout>
 
             <LinearLayout

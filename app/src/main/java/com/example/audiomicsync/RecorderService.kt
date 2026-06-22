@@ -13,9 +13,11 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.net.wifi.WifiManager
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
@@ -41,6 +43,7 @@ class RecorderService : Service() {
         const val PREF_UDP_PORT = "udp_port"
         const val PREF_SAMPLE_RATE = "sample_rate"
         const val PREF_MIC_DEVICE_ID = "mic_device_id"
+        const val PREF_MIC_DEVICE_KEY = "mic_device_key"
 
         const val DEFAULT_UDP_PORT = 9877
         const val DEFAULT_UPLOAD_PORT = 9878
@@ -63,6 +66,8 @@ class RecorderService : Service() {
 
     private var udpSocket: DatagramSocket? = null
     private var udpThread: Thread? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     private var audioRecord: AudioRecord? = null
     private var recordThread: Thread? = null
@@ -93,14 +98,25 @@ class RecorderService : Service() {
         createNotificationChannel()
 
         try {
-            // Start foreground WITHOUT microphone type.
-            // RECORD_AUDIO may not be granted yet; the type is promoted in startRecording().
-            startForeground(NOTIFICATION_ID, buildNotification("Starting UDP listener…"))
-            Log.d(TAG, "startForeground OK")
+            val notification = buildNotification("Starting UDP listener…")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                )
+                Log.d(TAG, "startForeground OK with microphone type")
+            } else {
+                // RECORD_AUDIO may not be granted yet; the type is promoted in startRecording().
+                startForeground(NOTIFICATION_ID, notification)
+                Log.d(TAG, "startForeground OK without microphone type")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "startForeground FAILED", e)
         }
 
+        acquireRuntimeLocks()
         startUdpListener()
     }
 
@@ -113,6 +129,7 @@ class RecorderService : Service() {
         Log.d(TAG, "onDestroy")
         stopUdpListener()
         stopRecordingImmediate()
+        releaseRuntimeLocks()
         super.onDestroy()
     }
 
@@ -150,6 +167,52 @@ class RecorderService : Service() {
         Log.d(TAG, "Notification: $text")
         getSystemService(NotificationManager::class.java)
             .notify(NOTIFICATION_ID, buildNotification(text))
+    }
+
+    private fun acquireRuntimeLocks() {
+        try {
+            val pm = getSystemService(PowerManager::class.java)
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$TAG:listener").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            Log.d(TAG, "Partial wake lock acquired")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire wake lock", e)
+            log("Wake lock error: ${e.message}")
+        }
+
+        try {
+            val wm = applicationContext.getSystemService(WifiManager::class.java)
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "$TAG:wifi").apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            Log.d(TAG, "Wi-Fi lock acquired")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to acquire Wi-Fi lock", e)
+            log("Wi-Fi lock error: ${e.message}")
+        }
+    }
+
+    private fun releaseRuntimeLocks() {
+        try {
+            wifiLock?.takeIf { it.isHeld }?.release()
+            Log.d(TAG, "Wi-Fi lock released")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to release Wi-Fi lock", e)
+        } finally {
+            wifiLock = null
+        }
+
+        try {
+            wakeLock?.takeIf { it.isHeld }?.release()
+            Log.d(TAG, "Partial wake lock released")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to release wake lock", e)
+        } finally {
+            wakeLock = null
+        }
     }
 
     // -----------------------------------------------------------------
@@ -268,7 +331,8 @@ class RecorderService : Service() {
         val prefs = prefs()
         val sampleRate = prefs.getInt(PREF_SAMPLE_RATE, 48000)
         val deviceId   = prefs.getInt(PREF_MIC_DEVICE_ID, -1)
-        Log.d(TAG, "AudioRecord config: sampleRate=$sampleRate deviceId=$deviceId")
+        val deviceKey  = prefs.getString(PREF_MIC_DEVICE_KEY, "") ?: ""
+        Log.d(TAG, "AudioRecord config: sampleRate=$sampleRate deviceId=$deviceId deviceKey=$deviceKey")
 
         val minBuf     = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val bufferSize = minBuf.coerceAtLeast(8192)
@@ -283,14 +347,16 @@ class RecorderService : Service() {
         )
         Log.d(TAG, "AudioRecord state=${record.state} (${if (record.state == AudioRecord.STATE_INITIALIZED) "OK" else "FAIL"})")
 
-        if (deviceId != -1) {
-            val am     = getSystemService(AudioManager::class.java)
-            val device = am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.id == deviceId }
+        if (deviceId != -1 || deviceKey.isNotBlank()) {
+            val am = getSystemService(AudioManager::class.java)
+            val inputs = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
+            val device = inputs.firstOrNull { it.id == deviceId }
+                ?: inputs.firstOrNull { micDeviceKey(it) == deviceKey }
             if (device != null) {
                 record.preferredDevice = device
                 Log.d(TAG, "preferredDevice set: ${device.productName} type=${device.type}")
             } else {
-                Log.w(TAG, "Saved deviceId=$deviceId not found — using default")
+                Log.w(TAG, "Saved deviceId=$deviceId deviceKey=$deviceKey not found — using default")
             }
         }
 
@@ -421,6 +487,10 @@ class RecorderService : Service() {
         audioRecord?.stop()
         audioRecord?.release()
         audioRecord = null
+    }
+
+    private fun micDeviceKey(d: android.media.AudioDeviceInfo): String {
+        return "${d.type}:${d.productName?.toString().orEmpty()}"
     }
 
     // -----------------------------------------------------------------
